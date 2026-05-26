@@ -1,0 +1,902 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>仿抖音极速视频播放器 - 文件夹上传版</title>
+    <!-- 引入 Tailwind CSS 构建现代时尚的 UI 界面的样式 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts 带来更清爽的字体体验 -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Noto Sans SC', sans-serif;
+            background-color: #0c0f17;
+            color: #ffffff;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        /* 隐藏滚动条，保持界面极简 */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        /* 抖音上下滑动的核心 CSS 滚动捕捉属性 */
+        .video-container {
+            scroll-snap-type: y mandatory;
+            height: 100vh;
+            overflow-y: scroll;
+        }
+        .video-slide {
+            scroll-snap-align: start;
+            scroll-snap-stop: always;
+            height: 100vh;
+            position: relative;
+        }
+        /* 旋转唱片动画 */
+        @keyframes rotateDisc {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .rotating-disc {
+            animation: rotateDisc 5s linear infinite;
+        }
+        /* 双击爱心弹出动画 */
+        @keyframes heartPop {
+            0% { transform: scale(0) rotate(-15deg); opacity: 0; }
+            50% { transform: scale(1.3) rotate(15deg); opacity: 0.9; }
+            80% { transform: scale(1) rotate(-10deg); opacity: 0.9; }
+            100% { transform: scale(0.8) rotate(0deg); opacity: 0; }
+        }
+        .heart-pop {
+            animation: heartPop 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+        /* 进度条动画 */
+        .progress-bar {
+            transition: height 0.1s;
+        }
+        .video-slide:hover .progress-bar-container {
+            height: 8px;
+        }
+    </style>
+</head>
+<body class="overflow-hidden flex h-screen w-screen relative">
+
+    <!-- 🌟 修改点 1：侧边控制管理面板升级为 Drawer 弹出模式，默认隐藏（-translate-x-full） -->
+    <div id="sidebarPanel" class="fixed inset-y-0 left-0 w-80 bg-slate-900/95 backdrop-blur-xl border-r border-slate-800 h-full text-slate-300 transition-transform duration-300 -translate-x-full z-50 flex flex-col shadow-2xl">
+        <!-- 头部带有关闭按钮 -->
+        <div class="p-5 border-b border-slate-800 flex justify-between items-center">
+            <div class="flex items-center space-x-2">
+                <span class="text-2xl font-black bg-gradient-to-r from-cyan-400 to-pink-500 bg-clip-text text-transparent">DOUYIN WEB</span>
+                <span class="text-xs bg-slate-800 text-cyan-400 px-2 py-0.5 rounded-full">本地版</span>
+            </div>
+            <!-- 关闭按钮 -->
+            <button onclick="toggleSidebar()" class="p-1 hover:bg-slate-800 rounded-full transition text-slate-400 hover:text-white" title="关闭设置">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+        </div>
+
+        <!-- 导入按钮区域 -->
+        <div class="p-4 space-y-3">
+            <div>
+                <label class="block text-xs font-medium text-slate-400 mb-1.5">导入方式一：选择文件夹</label>
+                <button onclick="document.getElementById('folderInput').click()" class="w-full bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white font-medium py-2 px-4 rounded-lg flex items-center justify-center space-x-2 transition shadow-lg shadow-indigo-900/30">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+                    <span>选择视频文件夹</span>
+                </button>
+                <input type="file" id="folderInput" webkitdirectory directory multiple accept="video/*" class="hidden" onchange="handleFileSelect(event)">
+            </div>
+
+            <div>
+                <label class="block text-xs font-medium text-slate-400 mb-1.5">导入方式二：多选文件</label>
+                <button onclick="document.getElementById('fileInput').click()" class="w-full bg-slate-800 hover:bg-slate-700 text-white font-medium py-2 px-4 rounded-lg flex items-center justify-center space-x-2 transition border border-slate-700">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                    <span>选取多个视频</span>
+                </button>
+                <input type="file" id="fileInput" multiple accept="video/*" class="hidden" onchange="handleFileSelect(event)">
+            </div>
+        </div>
+
+        <!-- 视频列表标题 -->
+        <div class="px-4 py-2 bg-slate-950 flex justify-between items-center text-xs font-bold text-slate-400">
+            <span>已加载视频 (<span id="videoCount">0</span>)</span>
+            <button onclick="clearPlaylist()" class="text-rose-400 hover:text-rose-300 transition">清空</button>
+        </div>
+
+        <!-- 视频列表区域 -->
+        <div id="playlistContainer" class="flex-1 overflow-y-auto p-2 space-y-1.5 no-scrollbar">
+            <!-- 占位提示 -->
+            <div id="emptyTip" class="text-center py-10 px-4 text-slate-500">
+                <svg class="w-12 h-12 mx-auto text-slate-600 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                <p class="text-sm">暂无本地视频</p>
+                <p class="text-xs mt-1">请上传文件夹或使用下方内置视频体验</p>
+                <button onclick="loadDemoPlaylist()" class="mt-4 px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white text-xs rounded-full transition">加载内置视频</button>
+            </div>
+            <!-- 动态注入的播放列表 -->
+        </div>
+
+        <!-- 底部说明 -->
+        <div class="p-4 border-t border-slate-800 text-xs text-slate-500 space-y-1">
+            <p>💡 提示: 您也可以直接把电脑里的视频文件拖拽到中间播放器区域哦！</p>
+        </div>
+    </div>
+
+    <!-- 播放器主体部分 (手机视角模拟器) -->
+    <div class="flex-1 h-full bg-[#000000] flex items-center justify-center relative" id="dropZone">
+        
+        <!-- 🌟 修改点 2：顶部悬浮的“设置与上传”按钮组（全端完美适配展现，带优雅的齿轮微转动效果） -->
+        <div class="absolute top-4 left-4 z-40 flex space-x-2">
+            <button onclick="toggleSidebar()" class="bg-black/60 backdrop-blur-md text-white px-4 py-2 rounded-full text-xs font-semibold border border-white/20 hover:bg-black/80 hover:border-white/40 transition duration-200 flex items-center space-x-2 shadow-lg active:scale-95">
+                <svg class="w-4 h-4 animate-[spin_12s_linear_infinite]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                </svg>
+                <span>设置与上传</span>
+            </button>
+        </div>
+
+        <!-- 核心：单页滑动视频容器 -->
+        <div id="videoContainer" class="video-container no-scrollbar w-full max-w-[480px] h-full bg-[#000000] relative shadow-[0_0_50px_rgba(0,0,0,0.8)] border-x border-white/5">
+            <!-- 视频流将通过 JavaScript 动态渲染填充 -->
+        </div>
+    </div>
+
+    <!-- 🌟 已彻底移除右下角悬浮通知 toastContainer 容器 -->
+
+    <!-- 侧边/底部半透明评论区抽屉 -->
+    <div id="commentDrawer" class="fixed inset-y-0 right-0 w-full sm:w-[400px] bg-slate-900/95 backdrop-blur-xl border-l border-slate-800 z-50 transform translate-x-full transition-transform duration-300 flex flex-col shadow-2xl">
+        <div class="p-4 border-b border-slate-800 flex justify-between items-center">
+            <div class="flex items-center space-x-2">
+                <span class="font-bold text-white text-lg">评论区</span>
+                <span id="drawerCommentCount" class="text-xs bg-slate-800 text-slate-400 px-2 py-0.5 rounded-full">0条评论</span>
+            </div>
+            <button onclick="closeComments()" class="p-1 hover:bg-slate-800 rounded-full transition text-slate-400 hover:text-white">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+        </div>
+        
+        <!-- 评论列表主体 -->
+        <div id="drawerCommentsList" class="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar">
+            <!-- 动态灌入评论内容 -->
+        </div>
+
+        <!-- 发表新评论输入框 -->
+        <div class="p-4 border-t border-slate-800 bg-slate-900 flex items-center space-x-2">
+            <input type="text" id="commentInput" placeholder="留下你精彩的评论吧..." class="flex-1 bg-slate-800 border border-slate-700 rounded-full py-2 px-4 text-sm text-white focus:outline-none focus:border-cyan-500 placeholder-slate-500">
+            <button onclick="submitComment()" class="bg-cyan-500 hover:bg-cyan-600 active:scale-95 text-white font-bold text-xs px-4 py-2.5 rounded-full transition shrink-0">发送</button>
+        </div>
+    </div>
+
+    <script>
+        // 初始化数据源 - 使用 Google GTV 官方公开、兼容性最强、且完美支持跨域加载的 MP4 测试源
+        const DEMO_VIDEOS = [
+            {
+                id: "demo-1",
+                name: "科技探索：火光律动.mp4",
+                url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+                author: "@科技视界",
+                title: "感受科技与光影交融的极致美学。火焰代表着人类文明的进化与探索。🔥💻 #科技之光 #唯美视觉 #数码硬件",
+                music: "Tech Odyssey - Electronic Beats",
+                likes: 85210,
+                comments: [
+                    { author: "@极客狂热粉", text: "光影渲染质量好高！爱了爱了。", time: "2小时前", liked: true },
+                    { author: "@微光", text: "非常震撼，很适合做科技测评的转场。", time: "5小时前", liked: false },
+                    { author: "@天际线", text: "一如既往的丝滑，本地解析绝了。", time: "1天前", liked: false }
+                ]
+            },
+            {
+                id: "demo-2",
+                name: "大自然呼唤：极速风光.mp4",
+                url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
+                author: "@地球探险家",
+                title: "去远行吧！逃离喧嚣的城市，寻找心之所向的避风港。🌲🏔️ #自驾旅行 #自然景观 #户外美景",
+                music: "Escape Theme - Nature Soundscape",
+                likes: 125400,
+                comments: [
+                    { author: "@背包客阿杰", text: "明天就出发，生活不仅有眼前的苟且！", time: "1小时前", liked: true },
+                    { author: "@橘子汽水", text: "配乐配得太治愈了，循环了好多遍。", time: "3小时前", liked: false }
+                ]
+            },
+            {
+                id: "demo-3",
+                name: "无限律动：快乐乐章.mp4",
+                url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4",
+                author: "@创意汇聚基地",
+                title: "把枯燥的生活过成有趣的乐章，开启今天的快乐能量！✨🎵 #正能量 #快乐生活 #创意日常",
+                music: "Happy Rhythm - Creative Collective",
+                likes: 295000,
+                comments: [
+                    { author: "@元气少女", text: "今天又是元气满满的一天，加油！", time: "10分钟前", liked: true },
+                    { author: "@大雄", text: "看完感觉心情愉悦，非常棒的剪辑。", time: "30分钟前", liked: true },
+                    { author: "@阿Q正传", text: "网页版能做到这么顺滑，真的厉害！", time: "2小时前", liked: false }
+                ]
+            }
+        ];
+
+        let playlist = [...DEMO_VIDEOS]; // 当前活动的视频播放列表
+        let activeIndex = 0;             // 当前正在播放的视频索引
+        let isMuted = false;             // 全局静音状态
+        let observer = null;             // 视频视口观察器
+
+        // 初始化运行
+        window.onload = function() {
+            renderPlaylistUI();
+            renderVideos();
+            setupDragAndDrop();
+            initKeyboardControls();
+            
+            // 提示用户体验
+            showToast("成功加载优质测试视频源，可立即上下滑动观看！");
+        }
+
+        // 渲染侧边栏列表 UI
+        function renderPlaylistUI() {
+            const container = document.getElementById('playlistContainer');
+            const emptyTip = document.getElementById('emptyTip');
+            const videoCountEl = document.getElementById('videoCount');
+
+            // 更新视频数量
+            videoCountEl.innerText = playlist.length;
+
+            if (playlist.length === 0) {
+                emptyTip.classList.remove('hidden');
+                // 清理多余列表项
+                const items = container.querySelectorAll('.playlist-item');
+                items.forEach(el => el.remove());
+                return;
+            }
+
+            emptyTip.classList.add('hidden');
+            
+            // 保留 emptyTip，清除其它列表元素
+            const oldItems = container.querySelectorAll('.playlist-item');
+            oldItems.forEach(el => el.remove());
+
+            playlist.forEach((item, index) => {
+                const div = document.createElement('div');
+                div.className = `playlist-item flex items-center space-x-3 p-2 rounded-lg cursor-pointer transition ${index === activeIndex ? 'bg-indigo-950/50 border border-indigo-800' : 'hover:bg-slate-800'}`;
+                div.onclick = () => scrollToSlide(index);
+                div.innerHTML = `
+                    <div class="relative w-16 h-10 bg-black rounded overflow-hidden flex items-center justify-center shrink-0">
+                        <!-- 动态简易视频小图标 -->
+                        <svg class="w-5 h-5 text-slate-500 absolute" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/></svg>
+                        <span class="absolute bottom-0 right-1 text-[9px] text-slate-400 bg-black/60 px-1 rounded">#${index+1}</span>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <p class="text-xs font-medium text-white truncate">${item.name}</p>
+                        <p class="text-[10px] text-slate-500 truncate mt-0.5">${item.author || '@本地视频'}</p>
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        // 清空列表
+        function clearPlaylist() {
+            // 释放由 URL.createObjectURL 创建的旧内存链接以防泄露
+            playlist.forEach(item => {
+                if (item.url.startsWith('blob:')) {
+                    URL.revokeObjectURL(item.url);
+                }
+            });
+            playlist = [];
+            activeIndex = 0;
+            renderPlaylistUI();
+            renderVideos();
+            showToast("播放列表已清空");
+        }
+
+        // 加载默认内置演示视频
+        function loadDemoPlaylist() {
+            clearPlaylist();
+            playlist = [...DEMO_VIDEOS];
+            renderPlaylistUI();
+            renderVideos();
+            showToast("已重置为默认超稳极速测试视频源");
+        }
+
+        // 统一处理用户上传视频（支持拖放和选择）
+        function handleFileSelect(event) {
+            const files = event.target.files;
+            processFiles(files);
+        }
+
+        // 处理文件集合并转为 Blob URL
+        function processFiles(files) {
+            if (!files || files.length === 0) return;
+
+            const videoFiles = Array.from(files).filter(file => file.type.startsWith('video/'));
+            
+            if (videoFiles.length === 0) {
+                showToast("未检测到有效的视频文件！", "error");
+                return;
+            }
+
+            // 加载中动画...
+            showToast(`正在本地解析 ${videoFiles.length} 个视频文件...`);
+
+            // 转换每个视频为本地可运行的对象资源
+            const newTracks = videoFiles.map((file, i) => {
+                const objectUrl = URL.createObjectURL(file);
+                // 自动生成创作者和简短描述
+                const titleWithoutExt = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
+                return {
+                    id: `local-${Date.now()}-${i}`,
+                    name: file.name,
+                    url: objectUrl,
+                    author: `@本地视频助手`,
+                    title: `${titleWithoutExt} 🎞️ 导入本地视频完美流畅播放。 #自制短视频 #本地生活`,
+                    music: `本地音乐伴奏 - ${titleWithoutExt}`,
+                    likes: Math.floor(Math.random() * 5000) + 10,
+                    comments: [
+                        { author: "@本地观众1号", text: "本地秒开，这画质和流畅度爱了！", time: "刚刚", liked: false }
+                    ]
+                };
+            });
+
+            // 如果当前只有演示视频，直接将其完全替换为上传的视频
+            const isDemoCurrent = playlist.length > 0 && playlist[0].id.startsWith('demo-');
+            if (isDemoCurrent) {
+                playlist = newTracks;
+            } else {
+                playlist = [...playlist, ...newTracks];
+            }
+
+            activeIndex = 0;
+            renderPlaylistUI();
+            renderVideos();
+
+            // 自动滚回第一个开始播放
+            setTimeout(() => {
+                scrollToSlide(0);
+            }, 100);
+
+            showToast(`成功解析并载入 ${videoFiles.length} 个视频，快去滑动浏览吧！`);
+        }
+
+        // 拖拽文件快捷体验支持
+        function setupDragAndDrop() {
+            const dropZone = document.getElementById('dropZone');
+
+            ['dragenter', 'dragover'].forEach(eventName => {
+                dropZone.addEventListener(eventName, (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    dropZone.classList.add('bg-slate-900/40');
+                }, false);
+            });
+
+            ['dragleave', 'drop'].forEach(eventName => {
+                dropZone.addEventListener(eventName, (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    dropZone.classList.remove('bg-slate-900/40');
+                }, false);
+            });
+
+            dropZone.addEventListener('drop', (e) => {
+                const dt = e.dataTransfer;
+                const files = dt.files;
+                processFiles(files);
+            }, false);
+        }
+
+        // 渲染核心上下滑动的 Video DOM 序列
+        function renderVideos() {
+            const container = document.getElementById('videoContainer');
+            container.innerHTML = ''; // 清空
+
+            if (playlist.length === 0) {
+                container.innerHTML = `
+                    <div class="h-full flex flex-col items-center justify-center p-6 text-center text-slate-500">
+                        <svg class="w-16 h-16 text-slate-700 animate-pulse mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+                        <h4 class="text-white font-bold mb-2">欢迎来到网页版抖音播放器</h4>
+                        <p class="text-sm mb-4">请在左侧上传您的本地视频文件夹，或单个视频</p>
+                        <button onclick="loadDemoPlaylist()" class="bg-gradient-to-r from-pink-500 to-cyan-500 text-white font-bold px-6 py-2 rounded-full text-sm">先体验演示视频</button>
+                    </div>
+                `;
+                return;
+            }
+
+            playlist.forEach((item, index) => {
+                const slide = document.createElement('div');
+                slide.className = 'video-slide w-full h-full flex items-center justify-center bg-black overflow-hidden';
+                slide.setAttribute('data-index', index);
+
+                // 构建视频 DOM（静音以防部分现代浏览器阻拦自动播放）
+                slide.innerHTML = `
+                    <!-- 核心视频播放媒介 -->
+                    <video class="w-full h-full object-contain pointer-events-none" 
+                           loop 
+                           preload="auto"
+                           playsinline
+                           webkit-playsinline
+                           src="${item.url}"
+                           ${isMuted ? 'muted' : ''}>
+                    </video>
+
+                    <!-- 双击视频爱心动画捕获遮罩 -->
+                    <div class="absolute inset-0 bg-transparent cursor-pointer z-10" 
+                         onclick="handleVideoClick(event, ${index})" 
+                         ondblclick="handleVideoDoubleClick(event, ${index})">
+                    </div>
+
+                    <!-- 大大的播放/暂停按钮视觉反馈效果 -->
+                    <div class="play-indicator absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 text-white/50 bg-black/40 p-4 rounded-full pointer-events-none scale-0 transition-all duration-300">
+                        <svg class="w-14 h-14" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                    </div>
+
+                    <!-- 视频加载失败时的提示界面（解决 NotSupportedError） -->
+                    <div id="errorOverlay-${index}" class="absolute inset-0 z-30 bg-slate-950 flex flex-col items-center justify-center text-center p-6 hidden">
+                        <svg class="w-12 h-12 text-rose-500 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                        </svg>
+                        <h4 class="text-white font-semibold text-sm mb-1">视频加载异常</h4>
+                        <p class="text-xs text-slate-400 mb-4 max-w-[280px]">在线视频源可能受限于网络或CORS限制。建议直接上传本地视频或文件夹，即可完美流畅体验！</p>
+                        <button onclick="document.getElementById('fileInput').click()" class="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-full text-xs transition">
+                            上传本地视频
+                        </button>
+                    </div>
+
+                    <!-- 右侧垂直互动控制栏 -->
+                    <div class="absolute right-3.5 bottom-28 z-20 flex flex-col items-center space-y-5">
+                        <!-- 头像区 -->
+                        <div class="relative mb-2">
+                            <div class="w-12 h-12 rounded-full border-2 border-white overflow-hidden bg-slate-800">
+                                <img src="https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(item.author)}" alt="avatar">
+                            </div>
+                            <button onclick="followUser(event, '${item.author}')" class="absolute -bottom-1.5 left-1/2 -translate-x-1/2 bg-rose-500 hover:bg-rose-600 rounded-full p-0.5 text-white active:scale-95 transition flex items-center justify-center">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
+                            </button>
+                        </div>
+
+                        <!-- 点赞 -->
+                        <div class="flex flex-col items-center">
+                            <button onclick="toggleLike(${index}, event)" class="w-11 h-11 bg-black/40 backdrop-blur-md rounded-full flex items-center justify-center text-white hover:bg-black/60 transition active:scale-90">
+                                <svg class="w-6 h-6 icon-like ${item.liked ? 'text-rose-500 fill-current' : 'text-white'}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
+                                </svg>
+                            </button>
+                            <span class="text-xs font-bold mt-1 text-slate-200" id="likeCount-${index}">${formatNumber(item.likes)}</span>
+                        </div>
+
+                        <!-- 评论 -->
+                        <div class="flex flex-col items-center">
+                            <button onclick="openComments(${index}, event)" class="w-11 h-11 bg-black/40 backdrop-blur-md rounded-full flex items-center justify-center text-white hover:bg-black/60 transition active:scale-90">
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                                </svg>
+                            </button>
+                            <span class="text-xs font-bold mt-1 text-slate-200">${item.comments.length}</span>
+                        </div>
+
+                        <!-- 转发/分享 -->
+                        <div class="flex flex-col items-center">
+                            <button onclick="shareVideo(${index}, event)" class="w-11 h-11 bg-black/40 backdrop-blur-md rounded-full flex items-center justify-center text-white hover:bg-black/60 transition active:scale-90">
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 10.742l4.632-2.316m0 0a3 3 0 10-.632-1.484l-4.632 2.316m0 0a3 3 0 100 4.316m0 0l4.632 2.316m0 0a3 3 0 10.632-1.484l-4.632-2.316"/>
+                                </svg>
+                            </button>
+                            <span class="text-xs font-bold mt-1 text-slate-200">分享</span>
+                        </div>
+
+                        <!-- 音频旋转碟片 -->
+                        <div class="w-10 h-10 rounded-full bg-zinc-800 border-4 border-zinc-700 p-1 rotating-disc mt-2 flex items-center justify-center">
+                            <div class="w-full h-full rounded-full bg-gradient-to-tr from-cyan-500 to-pink-500"></div>
+                        </div>
+                    </div>
+
+                    <!-- 底部创作者视频描述区 -->
+                    <div class="absolute bottom-6 left-4 right-16 z-20 space-y-2 pointer-events-none">
+                        <div class="flex items-center space-x-2">
+                            <span class="font-bold text-white text-base">${item.author}</span>
+                        </div>
+                        <p class="text-sm text-slate-200 leading-snug break-words max-h-24 overflow-y-auto no-scrollbar">${item.title}</p>
+                        
+                        <!-- 背景音乐跑马灯 -->
+                        <div class="flex items-center space-x-2 text-xs text-slate-300">
+                            <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"/></svg>
+                            <div class="overflow-hidden whitespace-nowrap w-40 relative">
+                                <div class="inline-block animate-[marquee_15s_linear_infinite] whitespace-nowrap pl-[100%]">
+                                    ${item.music}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 视频最底部超炫酷进度指示条（支持点击和悬浮反馈） -->
+                    <div class="progress-bar-container absolute bottom-0 left-0 right-0 h-1.5 bg-white/10 cursor-pointer z-30 transition-all duration-150" 
+                         onclick="seekVideo(event, ${index})">
+                        <div class="progress-bar h-full bg-gradient-to-r from-cyan-400 to-pink-500 w-0" id="progressBar-${index}"></div>
+                    </div>
+                `;
+                container.appendChild(slide);
+
+                // 添加加载失败的监控
+                const videoEl = slide.querySelector('video');
+                const errorOverlay = slide.querySelector(`#errorOverlay-${index}`);
+                
+                videoEl.addEventListener('error', function(e) {
+                    console.error("Video element error captured: ", e);
+                    if (errorOverlay) {
+                        errorOverlay.classList.remove('hidden');
+                    }
+                });
+            });
+
+            // 跑马灯动画自定义追加注入
+            if (!document.getElementById('marquee-animation-style')) {
+                const style = document.createElement('style');
+                style.id = 'marquee-animation-style';
+                style.innerHTML = `
+                    @keyframes marquee {
+                        0% { transform: translate3d(0, 0, 0); }
+                        100% { transform: translate3d(-100%, 0, 0); }
+                    }
+                `;
+                document.head.appendChild(style);
+            }
+
+            // 初始化视口交叉观察器（精确定位哪个视频处于当前可见状态并执行播放）
+            setupIntersectionObserver();
+        }
+
+        // 视口感知逻辑：滑到哪个，播哪个
+        function setupIntersectionObserver() {
+            if (observer) observer.disconnect();
+
+            const options = {
+                root: document.getElementById('videoContainer'),
+                threshold: 0.6 // 至少 60% 的区域可见时，触发状态改变
+            };
+
+            observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    const video = entry.target.querySelector('video');
+                    const index = parseInt(entry.target.getAttribute('data-index'));
+
+                    if (entry.isIntersecting) {
+                        // 该视频在主要区域
+                        activeIndex = index;
+                        video.muted = isMuted;
+                        
+                        // 尝试播放（可能受主流浏览器安全限制，需要用户产生过一次点击/滑动）
+                        const playPromise = video.play();
+                        if (playPromise !== undefined) {
+                            playPromise.then(_ => {
+                                // 正常播放
+                            }).catch(error => {
+                                // 如果浏览器禁止了声音自动播放，尝试静音播放
+                                video.muted = true;
+                                video.play().catch(e => {
+                                    console.warn("Autoplay blocked even when muted:", e);
+                                });
+                                showToast("提示: 开启音频请点击视频任何区域");
+                            });
+                        }
+
+                        // 关联更新进度条时间变化
+                        video.ontimeupdate = function() {
+                            updateProgressBar(index, video);
+                        };
+
+                        // 联动同步更新侧边列表高亮状态
+                        updatePlaylistHighlight();
+                    } else {
+                        // 划走，立刻暂停
+                        video.pause();
+                        video.currentTime = 0; // 回到起点
+                    }
+                });
+            }, options);
+
+            const slides = document.querySelectorAll('.video-slide');
+            slides.forEach(slide => observer.observe(slide));
+        }
+
+        // 更新进度条 UI
+        function updateProgressBar(index, video) {
+            if (video.duration) {
+                const progress = (video.currentTime / video.duration) * 100;
+                const bar = document.getElementById(`progressBar-${index}`);
+                if (bar) {
+                    bar.style.width = `${progress}%`;
+                }
+            }
+        }
+
+        // 点击进度条跳转
+        function seekVideo(event, index) {
+            event.stopPropagation();
+            const rect = event.currentTarget.getBoundingClientRect();
+            const clickX = event.clientX - rect.left;
+            const width = rect.width;
+            
+            const slide = document.querySelector(`.video-slide[data-index="${index}"]`);
+            if (slide) {
+                const video = slide.querySelector('video');
+                if (video && video.duration) {
+                    const newTime = (clickX / width) * video.duration;
+                    video.currentTime = newTime;
+                }
+            }
+        }
+
+        // 侧边栏高亮保持同步
+        function updatePlaylistHighlight() {
+            const items = document.querySelectorAll('.playlist-item');
+            items.forEach((item, index) => {
+                if (index === activeIndex) {
+                    item.classList.add('bg-indigo-950/50', 'border', 'border-indigo-800');
+                    item.classList.remove('hover:bg-slate-800');
+                    // 自动平滑滚动侧边栏列表到当前项，方便查看
+                    item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                } else {
+                    item.classList.remove('bg-indigo-950/50', 'border', 'border-indigo-800');
+                    item.classList.add('hover:bg-slate-800');
+                }
+            });
+        }
+
+        // 点击视频主体：实现 播放 / 暂停 的快捷切换
+        function handleVideoClick(event, index) {
+            const slide = event.currentTarget.closest('.video-slide');
+            const video = slide.querySelector('video');
+            const indicator = slide.querySelector('.play-indicator');
+
+            // 允许首次点击开启声音
+            if (video.muted && isMuted === false) {
+                video.muted = false;
+            }
+
+            if (video.paused) {
+                video.play().catch(e => console.warn("Play error:", e));
+                // 暂时播放指示器动效反馈
+                indicator.style.transform = 'translate(-50%, -50%) scale(1.5)';
+                indicator.style.opacity = '0';
+                setTimeout(() => {
+                    indicator.style.transform = '';
+                    indicator.style.opacity = '';
+                }, 300);
+            } else {
+                video.pause();
+                indicator.style.transform = 'translate(-50%, -50%) scale(1)';
+                indicator.style.opacity = '1';
+            }
+        }
+
+        // 双击视频主体：点赞（弹出小爱心动画）
+        function handleVideoDoubleClick(event, index) {
+            const slide = event.currentTarget.closest('.video-slide');
+            const bounding = slide.getBoundingClientRect();
+            
+            // 获取相对于该滑块的双击坐标
+            const x = event.clientX - bounding.left;
+            const y = event.clientY - bounding.top;
+
+            // 创建漂亮的飘心动画组件
+            const heart = document.createElement('div');
+            heart.className = 'absolute z-30 pointer-events-none heart-pop text-rose-500';
+            heart.style.left = `${x - 24}px`;
+            heart.style.top = `${y - 24}px`;
+            heart.innerHTML = `
+                <svg class="w-12 h-12 filter drop-shadow-[0_2px_10px_rgba(244,63,94,0.5)]" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
+                </svg>
+            `;
+            slide.appendChild(heart);
+
+            // 自动销毁动画后的 DOM
+            setTimeout(() => {
+                heart.remove();
+            }, 800);
+
+            // 如果当前还没点赞，执行点赞操作
+            if (!playlist[index].liked) {
+                toggleLike(index, event);
+            }
+        }
+
+        // 切换点赞状态
+        function toggleLike(index, event) {
+            if (event) event.stopPropagation();
+            
+            const item = playlist[index];
+            item.liked = !item.liked;
+
+            if (item.liked) {
+                item.likes += 1;
+            } else {
+                item.likes -= 1;
+            }
+
+            // 更新点赞数展示
+            const likeCountEl = document.getElementById(`likeCount-${index}`);
+            if (likeCountEl) {
+                likeCountEl.innerText = formatNumber(item.likes);
+            }
+
+            // 更新点赞爱心颜色样式
+            const slides = document.querySelectorAll('.video-slide');
+            const slide = slides[index];
+            if (slide) {
+                const heartIcon = slide.querySelector('.icon-like');
+                if (item.liked) {
+                    heartIcon.classList.add('text-rose-500', 'fill-current');
+                } else {
+                    heartIcon.classList.remove('text-rose-500', 'fill-current');
+                }
+            }
+        }
+
+        // 🌟 修改点 3：重写设置控制面板展开/折叠逻辑
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebarPanel');
+            sidebar.classList.toggle('-translate-x-full');
+        }
+
+        // 打开评论区抽屉
+        function openComments(index, event) {
+            if (event) event.stopPropagation();
+
+            const item = playlist[index];
+            const drawer = document.getElementById('commentDrawer');
+            const commentCount = document.getElementById('drawerCommentCount');
+            const commentList = document.getElementById('drawerCommentsList');
+
+            commentCount.innerText = `${item.comments.length} 条评论`;
+            commentList.innerHTML = '';
+
+            if (item.comments.length === 0) {
+                commentList.innerHTML = `
+                    <div class="text-center py-10 text-slate-500 text-sm">
+                        快来抢占沙发吧！🛋️
+                    </div>
+                `;
+            } else {
+                item.comments.forEach((c) => {
+                    const commentItem = document.createElement('div');
+                    commentItem.className = 'flex items-start space-x-3 text-slate-300';
+                    commentItem.innerHTML = `
+                        <div class="w-8 h-8 rounded-full overflow-hidden bg-slate-800 shrink-0 mt-0.5">
+                            <img src="https://api.dicebear.com/7.x/pixel-art/svg?seed=${encodeURIComponent(c.author)}" alt="avatar">
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div class="flex justify-between items-center">
+                                <span class="font-bold text-xs text-white">${c.author}</span>
+                                <span class="text-[10px] text-slate-500">${c.time || '刚刚'}</span>
+                            </div>
+                            <p class="text-sm mt-1 leading-relaxed text-slate-300">${c.text}</p>
+                        </div>
+                    `;
+                    commentList.appendChild(commentItem);
+                });
+            }
+
+            // 顺便挂载当前浏览的视频索引作为全局临时变量
+            drawer.setAttribute('data-target-index', index);
+            drawer.classList.remove('translate-x-full');
+        }
+
+        // 关闭评论区
+        function closeComments() {
+            const drawer = document.getElementById('commentDrawer');
+            drawer.classList.add('translate-x-full');
+        }
+
+        // 提交发表本地新评论
+        function submitComment() {
+            const drawer = document.getElementById('commentDrawer');
+            const input = document.getElementById('commentInput');
+            const text = input.value.trim();
+            const index = parseInt(drawer.getAttribute('data-target-index'));
+
+            if (!text) {
+                showToast("请输入评论内容哟~", "error");
+                return;
+            }
+
+            const newComment = {
+                author: "@热心网友_" + Math.floor(Math.random() * 900 + 100),
+                text: text,
+                time: "刚刚",
+                liked: false
+            };
+
+            // 追加进数组
+            playlist[index].comments.unshift(newComment);
+            input.value = '';
+
+            // 刷新评论展示列表
+            openComments(index);
+            // 提示一下
+            showToast("评论发表成功（保存在本地内存中）");
+        }
+
+        // 分享视频复制链接模拟
+        function shareVideo(index, event) {
+            if (event) event.stopPropagation();
+            
+            const textToCopy = `来看看我在网页版抖音上发现的宝藏视频《${playlist[index].name}》，快来一起围观！`;
+            
+            // 采用标准兼容的安全复制逻辑
+            const tempInput = document.createElement('textarea');
+            tempInput.value = textToCopy;
+            document.body.appendChild(tempInput);
+            tempInput.select();
+            document.execCommand('copy');
+            document.body.removeChild(tempInput);
+
+            showToast("📣 视频分享链接及描述已成功复制到剪贴板！");
+        }
+
+        // 点击用户加关注交互
+        function followUser(event, username) {
+            event.stopPropagation();
+            const btn = event.currentTarget;
+            btn.innerHTML = `<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>`;
+            btn.classList.remove('bg-rose-500', 'hover:bg-rose-600');
+            btn.classList.add('bg-slate-800', 'text-slate-400', 'scale-90');
+            showToast(`成功关注了 ${username}`);
+        }
+
+        // 手滑跳到特定的一页
+        function scrollToSlide(index) {
+            if (index < 0 || index >= playlist.length) return;
+
+            const slides = document.querySelectorAll('.video-slide');
+            if (slides[index]) {
+                slides[index].scrollIntoView({ behavior: 'smooth' });
+            }
+        }
+
+        // 键盘上/下方向键以及空格、静音键控制
+        function initKeyboardControls() {
+            document.addEventListener('keydown', (e) => {
+                if (playlist.length === 0) return;
+
+                // 如果此时输入框焦点活跃，不阻断正常输入
+                if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') {
+                    return;
+                }
+
+                if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    scrollToSlide(activeIndex - 1);
+                } else if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    scrollToSlide(activeIndex + 1);
+                } else if (e.key === ' ') { // 空格播放暂停
+                    e.preventDefault();
+                    const slides = document.querySelectorAll('.video-slide');
+                    const activeSlide = slides[activeIndex];
+                    if (activeSlide) {
+                        const mask = activeSlide.querySelector('.cursor-pointer');
+                        if (mask) mask.click();
+                    }
+                } else if (e.key === 'm' || e.key === 'M') { // M 键切换静音
+                    isMuted = !isMuted;
+                    const videos = document.querySelectorAll('video');
+                    videos.forEach(v => v.muted = isMuted);
+                }
+            });
+        }
+
+        // 提示功能已彻底禁用，静默处理，避免影响观看视频
+        function showToast(message, type = "success") {
+            // 不再执行任何 DOM 操作，保持播放页面绝对纯净
+        }
+
+        // 辅助格式化点赞数 (例如: 125400 -> 12.5w)
+        function formatNumber(num) {
+            if (num >= 10000) {
+                return (num / 10000).toFixed(1) + 'w';
+            }
+            return num;
+        }
+    </script>
+</body>
+</html>
